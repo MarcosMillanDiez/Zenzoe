@@ -1,2 +1,2 @@
 # Zenzoe
-Programa sencillo para conocer el estado y la posicion del agv y poder enviarle nuevas posiciones.
+Simple program to know the status and position of the AGV and sending new positions.
