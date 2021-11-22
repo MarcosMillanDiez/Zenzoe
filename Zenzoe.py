@@ -5,12 +5,11 @@ Created on Tue Oct 22 16:55:31 2019
 @author: Marcos Millán mmillan@ubu.es
 """
 
-import requests
-import xml.etree.ElementTree as ET
-import json
-import urllib3
-import time
-import json
+from requests import get, post
+from xml.etree.ElementTree import fromstring, ElementTree
+from json import dumps
+from urllib3 import disable_warnings
+from time import sleep
 
 # ########################################
 #            VARIABLE START
@@ -24,9 +23,9 @@ import json
 
 
 def get_pos(zenzoe_ip, i):
-    r = requests.get("https://" + zenzoe_ip + ":8888/service/robots", auth=('admin', 'admin'), verify=False)
-    root = ET.fromstring(r.text)
-    tree = ET.ElementTree(root)
+    r = get("https://" + zenzoe_ip + ":8888/service/robots", auth=('admin', 'admin'), verify=False)
+    root = fromstring(r.text)
+    tree = ElementTree(root)
     x_xml = tree.find('robot').find('position').get('x')
     y_xml = tree.find('robot').find('position').get('y')
     theta_xml = tree.find('robot').find('orientation').text
@@ -71,12 +70,12 @@ def post_pos(zenzoe_ip, x, y, ang, goalName):
     a = ('admin', 'admin')
     v = False
 
-    response = requests.post(ruta, headers=h, data=json.dumps(d), auth=a, verify=v)
+    response = post(ruta, headers=h, data=dumps(d), auth=a, verify=v)
 
 
 def main():
-    urllib3.disable_warnings()
-    action = "POST2"  # GET_MAP   GET   POS
+    disable_warnings()
+    action = "POST"  #GET   POST POST2
     zenzoe_ip = "192.168.100.70"
     zenzoe_name = "robot_zenzoe9"
 
@@ -99,7 +98,7 @@ def main():
                     action_state = get_status(zenzoe_ip)
                 if action_state == "FINISHED" or action_state == "ERROR":
                     post_pos(zenzoe_ip, x[i], y[i], ang[i], goalName)
-                    time.sleep(2)
+                    sleep(2)
                 while action_state == "FINISHED":
                     action_state = get_status(zenzoe_ip)
 
@@ -115,21 +114,11 @@ def main():
 
             print "FIN " + str(i)
             print "sleep"
-            time.sleep(1)
+            sleep(1)
 
     if action == "GET":
         print("GET_POS")
         get_pos(zenzoe_ip)
-
-    if action == "GET_MAP":
-        print "GET_MAP: "
-        get_map(zenzoe_ip)
-
-    if action == "POST_MAP":
-        print "POST_MAP"
-        post_map_new_forbiden(zenzoe_ip)
-        time.sleep(5)
-        post_original_map(zenzoe_ip)
 
 
 main()
