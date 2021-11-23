@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 22 16:55:31 2019
+Created on Mon Nov 22 2021
 
 @author: Marcos Millán mmillan@ubu.es
 """
@@ -8,45 +8,75 @@ Created on Tue Oct 22 16:55:31 2019
 from requests import get, post
 from xml.etree.ElementTree import fromstring, ElementTree
 from json import dumps
-from urllib3 import disable_warnings
-from time import sleep
-
-# ########################################
-#            VARIABLE START
-# type : EMERGENCY_STOP, IDLE_MODE, AUTOMATIC_CONTROL, STOP_AUTOMATIC_CONTROL, SET_INITIAL_POSITION,
-# GO_TO_POSITION, GO_TO_GOAL, GO_TO_HOME, GO_TO_DOCK, LOWLEVEL_LOAD, LOAD, LOWLEVEL_UNLOAD, UNLOAD,
-# START_CHARGING, STOP_CHARGING, MAPPING_START, MAPPING_STOP, MOVE_LHD, MOVE, TURN, TURN_TO, DASH,
-# START_FINE_POSITIONING, START_ESTABLISH_CLEARANCE, STOP_FINE_POSITIONING, DOCK, UNDOCK, UNCHECKED_LOAD,
-# UNCHECKED_UNLOAD, PLAY_SOUND, DETECT_PALLET, CONFIRM_ALARM, SHUTDOWN, CHARGE_AND_SHUTDOWN
-#
-# ########################################
+from time import sleep, time
+from os import getcwd, makedirs
 
 
-def get_pos(zenzoe_ip, i):
+def write_data(x, y, theta, state, action_state):
+    """ Writes AGV position and status data.
+
+    Write the information obtained in "position.csv" inside the "position_history" folder.
+
+    :param x: position on the x-axis.
+    :param y: position on the y-axis.
+    :param theta: orientation.
+    :param state: AGV status.
+    :param action_state: last order status.
+    :return:
+    """
+    route = getcwd() + '\\position_history\\'
+    route.makedirs(exist_ok=True)
+    name = 'position'
+    complete_route = route + name + '.csv'
+    header = ['x', 'y', 'theta', 'state', 'action_state', 'time']
+    data = [[x, y, theta, state, action_state, time()]]
+    df = pd.DataFrame(data=np.array(data), columns=header)
+    if os.path.isfile(complete_route):
+        df.to_csv(complete_route, index=False, sep=';', float_format='str',
+                  encoding='utf-8', decimal='.', mode="a", header=False)
+    else:
+        df.to_csv(complete_route, index=False, sep=';', float_format='str', encoding='utf-8', decimal='.')
+
+
+def get_agv_info(zenzoe_ip):
+    """ Obtains information from the AGV.
+
+    Obtains and stores AGV information in "position.csv" inside the "position_history" folder.
+
+    Returns x-axis position, y-axis position, orientation, status and running status.
+
+    :param zenzoe_ip: AGV ip address.
+    :return: x_pos, y_pos, theta_pos, state, action_state.
+    """
     r = get("https://" + zenzoe_ip + ":8888/service/robots", auth=('admin', 'admin'), verify=False)
     root = fromstring(r.text)
     tree = ElementTree(root)
-    x_xml = tree.find('robot').find('position').get('x')
-    y_xml = tree.find('robot').find('position').get('y')
-    theta_xml = tree.find('robot').find('orientation').text
+    x_pos = tree.find('robot').find('position').get('x')
+    y_pos = tree.find('robot').find('position').get('y')
+    theta_pos = tree.find('robot').find('orientation').text
     state = tree.find('robot').find('state').get('action')
     action_state = tree.find('robot').find('state').get('actionState')
-    f = open('points_order_'+str(i)+'.txt', 'a+')
-    f.write(str(x_xml) + " " + str(y_xml) + "\n")
-    f.close()
 
-    return x_xml, y_xml, theta_xml, state, action_state
+    write_data(x_pos, y_pos, theta_pos, state, action_state)
+    return x_pos, y_pos, theta_pos, state, action_state
 
 
-def get_status(zenzoe_ip):
-    get_x, get_y, get_ang, action, action_state = get_pos(zenzoe_ip, "zz")
-    return action_state
+def post_position(zenzoe_ip, x, y, ang, goal_name, zenzoe_name):
+    """Send a new destination position indicating x, y and angle coordinates.
 
+    Using the x, y coordinates and indicating the angle, we move the AGV to the indicated position.
 
-def post_pos(zenzoe_ip, x, y, ang, goalName):
+    :param zenzoe_ip: AGV ip address.
+    :param x: new position on the x-axis.
+    :param y: new position on the y-axis.
+    :param ang: new orientation.
+    :param goal_name: goal name.
+    :param zenzoe_name: AGV name.
+    :return: response: shipment status.
+    """
     d = {
         'type': 'GO_TO_POSITION',
-        'goalName': goalName,
+        'goalName': goal_name,
         'position': {
             'x': x,
             'y': y
@@ -60,66 +90,84 @@ def post_pos(zenzoe_ip, x, y, ang, goalName):
         'soundName': None
     }
 
-    d1 = {
-        'type': 'GO_TO_GOAL',
-        'goalName': goalName,
-    }
-
-    ruta = "https://" + zenzoe_ip + ":8888/service/robot/control/robot_zenzoe9"  # + zenzoe_name
+    route = "https://" + zenzoe_ip + ":8888/service/robot/control/", zenzoe_name
     h = {'Content-Type': 'Application/json', 'Accept': 'application/json'}
     a = ('admin', 'admin')
     v = False
 
-    response = post(ruta, headers=h, data=dumps(d), auth=a, verify=v)
+    response = post(route, headers=h, data=dumps(d), auth=a, verify=v)
+    return response
+
+
+def post_goal_name(zenzoe_ip, goal_name, zenzoe_name):
+    """ Send a predefined position.
+
+    By selecting the name of a position the AGV recognizes the coordinates and the angle at which it should move.
+
+    :param zenzoe_ip: AGV ip address.
+    :param goal_name: goal name.
+    :param zenzoe_name: AGV name.
+    :return: response: shipment status.
+    """
+    d = {
+        'type': 'GO_TO_GOAL',
+        'goalName': goal_name,
+    }
+
+    route = "https://" + zenzoe_ip + ":8888/service/robot/control/", zenzoe_name
+    h = {'Content-Type': 'Application/json', 'Accept': 'application/json'}
+    a = ('admin', 'admin')
+    v = False
+
+    response = post(route, headers=h, data=dumps(d), auth=a, verify=v)
+    return response
 
 
 def main():
-    disable_warnings()
-    action = "POST"  #GET   POST POST2
-    zenzoe_ip = "192.168.100.70"
-    zenzoe_name = "robot_zenzoe9"
+    action = "POST_POSITION"  # type: str
+    zenzoe_ip = "192.168.100.70"  # type: str
+    zenzoe_name = "robot_zenzoe9"  # type: str
+    goal_name = 'PARK1'  # type: str
+    time_out = 5
 
-    x = 33.108
-    y = 9.192
-    ang = -2.562
-    goalName = 'PARK1'
+    list_position = [[23.918, 14.364, 172.892], [23.156, 13.319, -70.829], [23.357, 12.649, -52.594],
+                     [24.074, 12.264, -3.522], [24.892, 12.493, 46.084], [25.268, 13.475, 97.388],
+                     [24.862, 14.212, 150.887]]  # type: List[[float ]]
 
-    x = [23.918, 23.156, 23.357, 24.074, 24.892, 25.268, 24.862]
-    y = [14.364, 13.319, 12.649, 12.264, 12.493, 13.475, 14.212]
-    ang = [172.892, -70.829, -52.594, -3.522, 46.084, 97.388, 150.887]
-
-    if action == "POST":
-        print("POST")
-        action_state = get_status(zenzoe_ip)
+    if action == "POST_POSITION":
         while 1:
-            for i in range(len(x)):
-                action_state = get_status(zenzoe_ip)
-                while action_state == "EXECUTE":  # EXECUTE FINISHED
-                    action_state = get_status(zenzoe_ip)
+            for position in list_position:
+                x_pos, y_pos, theta_pos, state, action_state = get_agv_info(zenzoe_ip)  # type: str
+                while action_state == "EXECUTE":
+                    x_pos, y_pos, theta_pos, state, action_state = get_agv_info(zenzoe_ip)  # type: str
                 if action_state == "FINISHED" or action_state == "ERROR":
-                    post_pos(zenzoe_ip, x[i], y[i], ang[i], goalName)
+                    response = post_position(zenzoe_ip, position[0], position[1], position[2], goal_name, zenzoe_name)  # type: int
+                    post_time = time()
+                    while response != 200 or time() - post_time >= time_out:  # We retry sending during timeout
+                        response = post_position(zenzoe_ip, position[0], position[1], position[2], goal_name, zenzoe_name)  # type: int
                     sleep(2)
                 while action_state == "FINISHED":
-                    action_state = get_status(zenzoe_ip)
+                    action_state = get_status(zenzoe_ip)  # type: str
 
-    if action == "POST2":
-        print("POST2")
-        for i in range(len(x)):
-            print "POST " + str(i)
-            post_pos(zenzoe_ip, x[i], y[i], ang[i], goalName)
-            pos_x, pos_y, get_ang, action, action_state = get_pos(zenzoe_ip, i)
-            while (x[i] + 0.05 < float(pos_x) or float(pos_x) < x[i] - 0.5) or (
-                    y[i] + 0.05 < float(pos_y) or float(pos_y) < y[i] - 0.05):
-                pos_x, pos_y, get_ang, action, action_state = get_pos(zenzoe_ip, i)
+    elif action == "POST_GOAL":
+        response = post_goal_name(zenzoe_ip, goal_name, zenzoe_name)  # type: int
+        post_time = time()
+        while response != 200 or time() - post_time >= time_out:  # We retry sending during timeout
+            sleep(0.1)
+            response = post_goal_name(zenzoe_ip, goal_name, zenzoe_name)  # type: int
 
-            print "FIN " + str(i)
-            print "sleep"
-            sleep(1)
+        x, y, ang, state, action_state = get_agv_info(zenzoe_ip)  # type: float, float, float, str, str
+        while action_state == "EXECUTE":
+            print 'action state: ', action_state
+            x, y, ang, state, action_state = get_agv_info(zenzoe_ip)
 
-    if action == "GET":
-        print("GET_POS")
-        get_pos(zenzoe_ip)
+    elif action == "GET_INFO":
+        x, y, ang, state, action_state = get_agv_info(zenzoe_ip)
+        print '\t- x position: ', x
+        print '\t- y position: ', y
+        print '\t- ang position: ', ang
+        print '\t- state: ', state
+        print '\t- action state: ', action_state
 
 
 main()
-
