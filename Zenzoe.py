@@ -76,13 +76,41 @@ def get_agv_info(zenzoe_ip, time_out):
 
         write_data(x_pos, y_pos, theta_pos, state, action_state)
 
-        print('\t- X position: ', x)
-        print('\t- Y position: ', y)
-        print('\t- Ang position: ', ang)
+        print('\t- X position: ', x_pos)
+        print('\t- Y position: ', y_pos)
+        print('\t- Ang position: ', theta_pos)
         print('\t- State: ', state)
         print('\t- Action state: ', action_state)
 
     return x_pos, y_pos, theta_pos, state, action_state
+
+
+def post_fineposition(zenzoe_ip, fineposition, time_out):
+    """ Indicates the AGV in which goal it is located.
+
+    :param zenzoe_ip: AGV ip address.
+    :param fineposition: Name of the goal in which it is located.
+    :param time_out: time we try to send the position.
+    :return: state.
+    """
+    data = str(fineposition)
+
+    route = "https://" + str(zenzoe_ip) + ":8888/service/v2/command/finepos"
+    headers = {'Content-Type': 'Application/json', 'Accept': 'application/json'}
+    auth = ('admin', 'admin')
+    verify = False
+    state = 400
+    try:
+        response = post(route, headers=headers, data=dumps(data), auth=auth, verify=verify, timeout=time_out)
+        state = response.status_code
+    except Timeout:
+        print('Timeout')
+    except RequestException as ex:
+        print('RequestException, ', ex)
+    except Exception as ex:
+        print('Error in obtaining information: ', ex)
+
+    return state
 
 
 def post_position(zenzoe_ip, x, y, ang, goal_name, zenzoe_name, time_out):
@@ -232,7 +260,7 @@ def move_to_goal(zenzoe_ip, goal_name, zenzoe_name, time_out):
         x, y, ang, state, action_state = get_agv_info(zenzoe_ip, time_out)
 
 
-def check_variables(action, zenzoe_ip, zenzoe_name, goal_name,  time_out, position_x, position_y,
+def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, time_out, position_x, position_y,
                     position_theta, list_position):
     """ Check value of initial variables.
 
@@ -240,6 +268,7 @@ def check_variables(action, zenzoe_ip, zenzoe_name, goal_name,  time_out, positi
     :param zenzoe_ip: AGV ip address.
     :param zenzoe_name: AGV name.
     :param goal_name: name of the target position.
+    :param fineposition:
     :param time_out: time we try to send the position.
     :param position_x: new position on the x-axis.
     :param position_y: new position on the y-axis.
@@ -247,35 +276,39 @@ def check_variables(action, zenzoe_ip, zenzoe_name, goal_name,  time_out, positi
     :param list_position: points trajectory.
     :return:
     """
-    assert action == "POST_POSITION" or action == "POST_PATH" or action == "POST_GOAL" or action == "GET_INFO", (
-        'Invalid action status')
+    assert action == "POST_POSITION" or action == "POST_PATH" or action == "POST_GOAL" or action == "GET_INFO" or\
+           action == "GET_GOAL_POSITION", 'Invalid action status'
     assert type(zenzoe_ip) == str, "Variable zenzoe_ip should be a string."
-    assert inet_aton(zenzoe_ip), "Ip not valid."
+    assert inet_aton("1.1.2.3"), "Ip not valid."
     assert type(zenzoe_name) == str, "Variable zenzoe_name should be a string."
     if action == "POST_GOAL":
-        assert type(goal_name) == str, "Variable goal_name should be a string."
+        assert type(goal_name) == str and goal_name != '', "Variable goal_name should be a string and contain text."
     assert type(time_out) == int, "Variable time_out should be a string."
     if action == "POST_POSITION":
         assert type(position_x) == float and type(position_y) == float and type(position_theta) == float, (
             "Variable position_x, position_y, position_theta should be a float")
     if action == "POST_PATH":
         assert len(list_position) > 0, "The path doesn't contain positions."
+    if action == "POST_FINEPOSITION":
+        assert type(fineposition) == str and fineposition != '', (
+            "Variable fineposition should be a string and contain text.")
 
 
 # TODO(Marcos) create AGV class.
 def main():
     # TODO(Marcos) start variables by reading a json file.
-    action = "POST_POSITION"  # type: str
+    action = "POST_FINEPOSITION"  # type: str
     zenzoe_ip = "192.168.100.70"  # type: str
     zenzoe_name = "robot_zenzoe9"  # type: str
-    goal_name = 'PARK1'  # type: str
+    goal_name = "PARK1"  # type: str
+    fineposition = "CHARGE_01_MG"  # type: str
     time_out = 5  # type: int
     position_x, position_y, position_theta = 23.123, 13.319, 97.388  # type: float
     list_position = [[23.918, 14.364, 172.892], [23.156, 13.319, -70.829], [23.357, 12.649, -52.594],
                      [24.074, 12.264, -3.522], [24.892, 12.493, 46.084], [25.268, 13.475, 97.388],
                      [24.862, 14.212, 150.887]]  # type: List[[float, float, float ], ...]
 
-    check_variables(action, zenzoe_ip, zenzoe_name, goal_name, time_out, position_x, position_y,
+    check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, time_out, position_x, position_y,
                     position_theta, list_position)
 
     if action == "POST_POSITION":
@@ -289,6 +322,9 @@ def main():
 
     elif action == "GET_INFO":
         get_agv_info(zenzoe_ip, time_out)
+
+    elif action == "POST_FINEPOSITION":
+        post_fineposition(zenzoe_ip, fineposition, time_out)
 
 
 if __name__ == '__main__':
