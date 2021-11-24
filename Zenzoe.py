@@ -268,7 +268,7 @@ def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, tim
     :param zenzoe_ip: AGV ip address.
     :param zenzoe_name: AGV name.
     :param goal_name: name of the target position.
-    :param fineposition:
+    :param fineposition: Name of the goal in which it is located.
     :param time_out: time we try to send the position.
     :param position_x: new position on the x-axis.
     :param position_y: new position on the y-axis.
@@ -279,7 +279,6 @@ def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, tim
     assert action == "POST_POSITION" or action == "POST_PATH" or action == "POST_GOAL" or action == "GET_INFO" or\
            action == "GET_GOAL_POSITION", 'Invalid action status'
     assert type(zenzoe_ip) == str, "Variable zenzoe_ip should be a string."
-    assert inet_aton("1.1.2.3"), "Ip not valid."
     assert type(zenzoe_name) == str, "Variable zenzoe_name should be a string."
     if action == "POST_GOAL":
         assert type(goal_name) == str and goal_name != '', "Variable goal_name should be a string and contain text."
