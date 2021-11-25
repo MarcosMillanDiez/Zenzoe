@@ -85,17 +85,34 @@ def get_agv_info(zenzoe_ip, time_out):
     return x_pos, y_pos, theta_pos, state, action_state
 
 
-def post_fineposition(zenzoe_ip, fineposition, time_out):
-    """ Indicates the AGV in which goal it is located.
+def post_robot_control(zenzoe_ip, zenzoe_name, command_type, goalname, x, y, orientation, time_out):
+    """ Used to send a RobotCommand to the robot specified by it's name.
 
     :param zenzoe_ip: AGV ip address.
-    :param fineposition: Name of the goal in which it is located.
-    :param time_out: time we try to send the position.
+    :param zenzoe_name: AGV name.
+    :param goalname: Target position name.
+    :param command_type: Command name.
+    :param x: New position on the x-axis.
+    :param y: New position on the y-axis.
+    :param orientation: New orientation.
+    :param time_out: Time we try to send the position.
     :return: state.
     """
-    data = str(fineposition)
 
-    route = "https://" + str(zenzoe_ip) + ":8888/service/v2/command/finepos"
+    data = {
+        "type": command_type,
+        "goal": goalname,
+        "angular": 0,
+        "linear": 0,
+        "x": x,
+        "y": y,
+        "angle": 0,
+        "orientation": orientation,
+        "height": 0,
+        "sound": None
+    }
+
+    route = "https://" + str(zenzoe_ip) + ":8888/service/robot/control/" + zenzoe_name
     headers = {'Content-Type': 'Application/json', 'Accept': 'application/json'}
     auth = ('admin', 'admin')
     verify = False
@@ -119,13 +136,13 @@ def post_position(zenzoe_ip, x, y, ang, goal_name, zenzoe_name, time_out):
     Using the x, y coordinates and indicating the angle, we move the AGV to the indicated position.
 
     :param zenzoe_ip: AGV ip address.
-    :param x: new position on the x-axis.
-    :param y: new position on the y-axis.
-    :param ang: new orientation.
-    :param goal_name: goal name.
+    :param x: New position on the x-axis.
+    :param y: New position on the y-axis.
+    :param ang: New orientation.
+    :param goal_name: Target position name.
     :param zenzoe_name: AGV name.
-    :param time_out: time we try to send the position.
-    :return: response: shipment status.
+    :param time_out: Time we try to send the position.
+    :return: response: Shipment status.
     """
     data = {
         'type': 'GO_TO_POSITION',
@@ -167,10 +184,10 @@ def post_goal_name(zenzoe_ip, goal_name, zenzoe_name, time_out):
     By selecting the name of a position the AGV recognizes the coordinates and the angle at which it should move.
 
     :param zenzoe_ip: AGV ip address.
-    :param goal_name: goal name.
+    :param goal_name: Goal name.
     :param zenzoe_name: AGV name.
-    :param time_out: time we try to send the position.
-    :return: staus: shipment status.
+    :param time_out: Time we try to send the position.
+    :return: staus: Shipment status.
     """
     data = {
         'type': 'GO_TO_GOAL',
@@ -186,11 +203,11 @@ def post_goal_name(zenzoe_ip, goal_name, zenzoe_name, time_out):
         response = post(route, headers=headers, data=dumps(data), auth=auth, verify=verify, timeout=time_out)
         state = response.status_code
     except Timeout:
-        print('- Timeout')
+        print('Timeout')
     except RequestException as ex:
-        print('- RequestException, ', ex)
+        print('RequestException, ', ex)
     except Exception as ex:
-        print('- Error in sending information: ', ex)
+        print('Error in sending information: ', ex)
 
     return state
 
@@ -200,24 +217,24 @@ def move_to_pos(zenzoe_ip, position_x, position_y, position_theta, zenzoe_name, 
 
     We send a new position when the action status is "FINISHED" or a "ERROR".
 
-    :param position_x: new position on the x-axis.
-    :param position_y: new position on the y-axis.
-    :param position_theta: new orientation.
+    :param position_x: New position on the x-axis.
+    :param position_y: New position on the y-axis.
+    :param position_theta: New orientation.
     :param zenzoe_ip: AGV ip address.
     :param zenzoe_name: AGV name.
-    :param time_out: time we try to send the position.
+    :param time_out: Time we try to send the position.
     :return:
     """
 
     x_pos, y_pos, theta_pos, state, action_state = get_agv_info(zenzoe_ip, time_out)  # type: str
     while action_state == "EXECUTE":
         x_pos, y_pos, theta_pos, state, action_state = get_agv_info(zenzoe_ip, time_out)  # type: str
-    if action_state == "FINISHED" or action_state == "ERROR":
+    if action_state == "FINISHED" or action_state == "ERROR" or action_state == 0:
         response_code = post_position(zenzoe_ip, position_x, position_y, position_theta, 'goal_name_1',
                                       zenzoe_name, time_out)  # type: int
         post_time = time()
-        while response_code != 200 or time() - post_time >= time_out:  # We retry sending during timeout
-            response_code = post_position(zenzoe_ip, position[0], position[1], position[2], goal_name,
+        while response_code != 200 and time() - post_time <= time_out:  # We retry sending during timeout
+            response_code = post_position(zenzoe_ip, position_x, position_y, position_theta,  'goal_name_1',
                                           zenzoe_name, time_out)  # type: int
             sleep(0.2)
         sleep(2)
@@ -228,10 +245,10 @@ def move_to_pos(zenzoe_ip, position_x, position_y, position_theta, zenzoe_name, 
 def send_path(list_position, zenzoe_ip, zenzoe_name, time_out):
     """ We link a series of positions together to create a route.
 
-    :param list_position: points trajectory.
+    :param list_position: Points trajectory.
     :param zenzoe_ip: AGV ip address.
     :param zenzoe_name: AGV name.
-    :param time_out: time we try to send the position.
+    :param time_out: Time we try to send the position.
     :return:
     """
     for position in list_position:
@@ -244,14 +261,14 @@ def move_to_goal(zenzoe_ip, goal_name, zenzoe_name, time_out):
     We send a new goal position when the action status is "FINISHED" or a "ERROR".
 
     :param zenzoe_ip: AGV ip address.
-    :param goal_name: name of the target position.
+    :param goal_name: Target position name.
     :param zenzoe_name: AGV name.
-    :param time_out: time we try to send the position.
+    :param time_out: Time we try to send the position.
     :return:
     """
     response_code = post_goal_name(zenzoe_ip, goal_name, zenzoe_name, time_out)  # type: int
     post_time = time()
-    while response_code != 200 or time() - post_time >= time_out:  # We retry sending during timeout
+    while response_code != 200 and time() - post_time <= time_out:  # We retry sending during timeout
         response_code = post_goal_name(zenzoe_ip, goal_name, zenzoe_name, time_out)  # type: int
         sleep(0.2)
 
@@ -260,24 +277,31 @@ def move_to_goal(zenzoe_ip, goal_name, zenzoe_name, time_out):
         x, y, ang, state, action_state = get_agv_info(zenzoe_ip, time_out)
 
 
-def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, time_out, position_x, position_y,
+def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, command_type, time_out, position_x, position_y,
                     position_theta, list_position):
     """ Check value of initial variables.
 
     :param action: Action to be performed by AGV
     :param zenzoe_ip: AGV ip address.
     :param zenzoe_name: AGV name.
-    :param goal_name: name of the target position.
-    :param fineposition: Name of the goal in which it is located.
-    :param time_out: time we try to send the position.
-    :param position_x: new position on the x-axis.
-    :param position_y: new position on the y-axis.
-    :param position_theta: new orientation.
-    :param list_position: points trajectory.
+    :param goal_name: Target position name.
+    :param command_type: Command name.
+    :param time_out: Time we try to send the position.
+    :param position_x: New position on the x-axis.
+    :param position_y: New position on the y-axis.
+    :param position_theta: New orientation.
+    :param list_position: Points trajectory.
     :return:
     """
-    assert action == "POST_POSITION" or action == "POST_PATH" or action == "POST_GOAL" or action == "GET_INFO" or\
-           action == "GET_GOAL_POSITION", 'Invalid action status'
+    list_action = ["POST_POSITION", "POST_PATH", "POST_GOAL", "GET_INFO", "POST_ROBOT_CONTROL"]
+    list_command_type = ["EMERGENCY_STOP", "IDLE_MODE", "AUTOMATIC_CONTROL", "STOP_AUTOMATIC_CONTROL",
+                         "SET_INITIAL_POSITION", "GO_TO_POSITION", "GO_TO_GOAL", "GO_TO_HOME", "GO_TO_DOCK",
+                         "LOWLEVEL_LOAD", "LOAD", "LOWLEVEL_UNLOAD", "UNLOAD", "START_CHARGING", "STOP_CHARGING",
+                         "MAPPING_START", "MAPPING_STOP", "MOVE_LHD", "MOVE", "TURN", "TURN_TO", "DASH",
+                         "START_FINE_POSITIONING", "START_ESTABLISH_CLEARANCE", "STOP_FINE_POSITIONING", "DOCK",
+                         "UNDOCK", "UNCHECKED_LOAD", "UNCHECKED_UNLOAD", "PLAY_SOUND", "DETECT_PALLET", "CONFIRM_ALARM",
+                         "SHUTDOWN", "CHARGE_AND_SHUTDOWN"]
+    assert action in list_action, 'Invalid action status'
     assert type(zenzoe_ip) == str, "Variable zenzoe_ip should be a string."
     assert type(zenzoe_name) == str, "Variable zenzoe_name should be a string."
     if action == "POST_GOAL":
@@ -288,30 +312,31 @@ def check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, tim
             "Variable position_x, position_y, position_theta should be a float")
     if action == "POST_PATH":
         assert len(list_position) > 0, "The path doesn't contain positions."
-    if action == "POST_FINEPOSITION":
-        assert type(fineposition) == str and fineposition != '', (
+    if action == "POST_ROBOT_CONTROL":
+        assert type(command_type) == str and command_type != '', (
             "Variable fineposition should be a string and contain text.")
+        assert command_type in list_command_type, "Incorrect command type."
 
 
 # TODO(Marcos) create AGV class.
 def main():
     # TODO(Marcos) start variables by reading a json file.
-    action = "POST_FINEPOSITION"  # type: str
+    action = "POST_PATH"  # type: str
     zenzoe_ip = "192.168.100.70"  # type: str
     zenzoe_name = "robot_zenzoe9"  # type: str
     goal_name = "PARK1"  # type: str
-    fineposition = "CHARGE_01_MG"  # type: str
+    command_type = "START_FINE_POSITIONING"  # type: str
     time_out = 5  # type: int
-    position_x, position_y, position_theta = 23.123, 13.319, 97.388  # type: float
+    pos_x, pos_y, pos_theta = 23.123, 13.319, 97.388  # type: float
     list_position = [[23.918, 14.364, 172.892], [23.156, 13.319, -70.829], [23.357, 12.649, -52.594],
                      [24.074, 12.264, -3.522], [24.892, 12.493, 46.084], [25.268, 13.475, 97.388],
                      [24.862, 14.212, 150.887]]  # type: List[[float, float, float ], ...]
 
-    check_variables(action, zenzoe_ip, zenzoe_name, goal_name, fineposition, time_out, position_x, position_y,
-                    position_theta, list_position)
+    check_variables(action, zenzoe_ip, zenzoe_name, goal_name, command_type, time_out, pos_x, pos_y,
+                    pos_theta, list_position)
 
     if action == "POST_POSITION":
-        move_to_pos(zenzoe_ip, position_x, position_y, position_theta, zenzoe_name, time_out)
+        move_to_pos(zenzoe_ip, pos_x, pos_y, pos_theta, zenzoe_name, time_out)
 
     elif action == "POST_PATH":
         send_path(list_position, zenzoe_ip, zenzoe_name, time_out)
@@ -322,8 +347,8 @@ def main():
     elif action == "GET_INFO":
         get_agv_info(zenzoe_ip, time_out)
 
-    elif action == "POST_FINEPOSITION":
-        post_fineposition(zenzoe_ip, fineposition, time_out)
+    elif action == "POST_ROBOT_CONTROL":
+        post_robot_control(zenzoe_ip, zenzoe_name, command_type, goal_name, pos_x, pos_y, pos_theta, time_out)
 
 
 if __name__ == '__main__':
